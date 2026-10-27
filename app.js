@@ -9,7 +9,7 @@
     selectedDay: 'Sunday',
     selectedSlot: 'all', // 'all', 'current', or slot id
     selectedFloor: 'all', // 'all', '2nd', '4th', '5th'
-    statusFilter: 'free_only', // 'free_only', 'free_practice', 'all'
+    statusFilter: 'free_only', // 'free_only', 'practice_only', 'free_practice', 'all'
     searchQuery: '',
     activeTab: 'cards', // 'cards', 'matrix', 'rooms'
     theme: localStorage.getItem('ewu_lab_theme') || 'dark',
@@ -486,6 +486,8 @@
         const liveStatus = getRoomLiveStatus(room, state.selectedDay, state.currentTimeMin);
         if (state.statusFilter === 'free_only') {
           return liveStatus.isFree && !liveStatus.isPractice;
+        } else if (state.statusFilter === 'practice_only') {
+          return liveStatus.isPractice;
         } else if (state.statusFilter === 'free_practice') {
           return liveStatus.isFree;
         }
@@ -494,6 +496,7 @@
         if (targetSlot) {
           const slotStatus = checkRoomSlotStatus(room, state.selectedDay, targetSlot);
           if (state.statusFilter === 'free_only' && slotStatus.status !== 'free') return false;
+          if (state.statusFilter === 'practice_only' && slotStatus.status !== 'practice') return false;
           if (state.statusFilter === 'free_practice' && slotStatus.status === 'busy') return false;
         }
       } else {
@@ -502,6 +505,10 @@
           // Has at least one free interval today
           const intervals = getFreeIntervalsForDay(room, state.selectedDay);
           return intervals.length > 0;
+        } else if (state.statusFilter === 'practice_only') {
+          // Has at least one practice hour scheduled today
+          const daySchedule = room.schedule[state.selectedDay] || [];
+          return daySchedule.some(item => item.isPractice);
         }
       }
 
@@ -608,7 +615,18 @@
         }
       } else {
         // All-day view: Show major free window
-        if (daySchedule.length === 0) {
+        const practiceSlots = daySchedule.filter(s => s.isPractice);
+        if (state.statusFilter === 'practice_only' && practiceSlots.length > 0) {
+          cardStatusClass = 'is-practice';
+          statusBadgeHtml = `<span class="status-badge practice">🔵 ${practiceSlots.length} Practice Slot${practiceSlots.length > 1 ? 's' : ''}</span>`;
+          const practiceTimes = practiceSlots.map(p => `${p.start} - ${p.end}`).join(', ');
+          highlightHtml = `
+            <div class="availability-highlight">
+              <div class="highlight-label">Scheduled Practice Hours</div>
+              <div class="highlight-time" style="color: var(--color-practice);">${practiceTimes}</div>
+            </div>
+          `;
+        } else if (daySchedule.length === 0) {
           cardStatusClass = 'is-free';
           statusBadgeHtml = `<span class="status-badge free">🟢 Free All Day</span>`;
           highlightHtml = `
